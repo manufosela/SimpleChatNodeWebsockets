@@ -1,0 +1,339 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <title>Simple Chat Connection Demo - Client</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta name="description" content="basic chat connection demo" />
+    <meta name="author" content="@manufosela" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="stylesheet/less" type="text/css" href="css/style.less" />
+    <script src="js/libs/less.js" type="text/javascript"></script>
+    <script src="js/libs/modernizr-2.5.3.min.js"></script>
+  </head>
+
+  <body>
+      <h1 class="spanish">Ejemplo de chat simple con websockets</h1>
+      <h1 class="english">Simple chat example with websockets</h1>
+      <div id="main">
+        <div id="connectedusersLayer">
+          <div id='me' class='me'></div>
+          <h4>Connected Users</h4>
+          <div id="connectedusers"></div>
+        </div>
+        <div id="chatwindows"></div>
+      </div>
+
+      <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+      <script>window.jQuery||document.write('<script src="js/libs/jquery-1.8.2.min.js"><\/script>')</script>
+      <script type="text/javascript" src="js/socket.io.js"></script>
+      <script type="text/javascript" src="js/config.js"></script>
+      <script>
+        /**
+        * Closure con toda la aplicación cliente,
+        * Crea su propio ambito de ejecución y lo aisla de otro posible código javascript
+        *
+        * Closure contents the client app
+        * It create its own execution scope and it isolates from other javascript code possible
+        */
+        (function() {
+          /**
+            * variables globales dentro del ambito creado en la closure
+            *
+            * goblal variables into the scope created by the closure
+            */
+          var socket,
+              nickname,
+              chatWindows = [],
+              debug = config.debug,
+              chatroom,
+              user = {},
+              chatServerURL = 'http://' + config.server_host + ':' + config.socket_port;
+          /**
+          * Mensaje inicial mostrado hasta que se intente la conexión con server.js
+          *
+          * Initial message shown until it will be try the connection with server.js
+          */
+          $( "#connectedusers" ).html( "Desconectado / Disconnected" );
+
+          /**
+          * Crea el objeto socket y conecta con server.js
+          *
+          * It creates the socket object and it connects with server.js
+          */
+          socket = io.connect( chatServerURL );
+
+          /**
+          * Escucha por el Evento / Mensaje que se recibe de server.js
+          * cuando se conecte el cliente al servidor y ejecutar la funcion anonima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when the client will be connected with server and it executes the anonymous function
+          */
+          socket.on( 'connect', function () {
+            /**
+            * Pregunta por el nick del usuario y lo envia al servidor
+            *
+            * It ask what is the user's nick and it will send to the server
+            */
+            $( "#connectedusers" ).html( "" );
+            consoleLog( 'Connected' );
+            if ( !nickname ) {
+              nickname = prompt( '¿Cual es tu nick?\n\nWhat is your nickname?' );
+              if (nickname) {
+                socket.emit( 'set nickname', nickname );
+              } else {
+                consoleLog( 'no login' );
+              }
+            } else {
+              consoleLog( "Enviando nick automaticamente" );
+              socket.emit( 'set nickname', nickname );
+            }
+          });
+
+          /**
+          * Escucha por el Evento / Mensaje que se reciba de server.js
+          * cuando la conexion se ha realizado correctamente y ejecuta la función anónima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when the connection will be occurs alright and it executes the anonymous function
+          *
+          */
+          socket.on( 'connection ok' , function() {
+            consoleLog( 'Connection ok' );
+          });
+
+          /**
+          * Escucha por el Evento / Mensaje que se reciba de server.js
+          * cuando el login se realiza correctamente y ejecuta la función anónima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when the login will be occurs alright and it executes the anonymous function
+          */
+          socket.on( 'login ok', function () {
+            consoleLog( 'Logged!' );
+          });
+
+          /**
+          * Escucha por el Evento / Mensaje que se recibe de server.js
+          * cuando falla el login y ejecutar la función anónima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when the login fails and it excutes the anoymous function
+          */
+          socket.on( 'login fail', function ( data ) {
+            consoleLog( 'User exist' );
+            var msgerror = ( typeof data != "undefined" )?"EL usuario '" + data.namenovalid + "' ya existe\n\nUser '" + data.namenovalid + "' exists yet!":"Usuario vacío no es válido\n\nEmpty user is not valid";
+            nickname = prompt( msgerror );
+            socket.emit( 'set nickname', nickname );
+          });
+          /**
+          * Escucha por el Evento / Mensaje que se reciba de server.js
+          * cuando se reciba un mensaje y ejecutar la función anónima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when it will be recived a message and it executes the anonymous function
+          */
+          socket.on( 'message', function( data ) {
+            var from = data.from,
+                msg = data.msg,
+                action = ( typeof data.action != 'undefined' )?data.action:"";
+            consoleLog( "'message' received: " + JSON.stringify( data ) );
+            consoleLog( "Action: " + action );
+            switch( action ) {
+
+              /**
+               * Como se hace un broadcasat se pregunta quien eres y si coincides te unes al chatroom
+               *
+               * Because it has been a broadcasting, it asks who are you and if you are the one, you join to the chatroom.
+               */
+              case "joinwith":
+                if ( data.with == nickname ) {
+                  chatroom = data.from + ' with ' + nickname;
+                  user[chatroom] = data.from;
+                  socket.emit( 'joinaccepted', { chatroom: chatroom, with: user[chatroom], me:nickname } );
+                }
+                break;
+
+              /**
+               * Indica de los dos usuarios están en el chat room.
+               * Se habilita la ventana de chat room
+               *
+               * It means both users are into the chat room.
+               * It will be enabled the chat room window
+               */
+              case "joined":
+                consoleLog( "execute action joined..." );
+                chatroom = data.chatroom.replace(' with ', '_');
+                var tmp = chatroom.split( "_" );
+                user[data.chatroom] = ( tmp[0] == nickname )?tmp[1]:tmp[0];
+                $( "#chatwindows" ).append( "<div id='chatroom-" + chatroom + "' class='chatroom'></div>" );
+                $( "#chatroom-" + chatroom ).append( "<div id='chattitle-" + chatroom + "' class='chattitle'></div>" );
+                $( "#chattitle-" + chatroom ).append("<div class='chatwith'>Chat with " + user[data.chatroom] + "</div>");
+                $( "#chattitle-" + chatroom ).append("<input type='button' class='disconnchatbtn' id='disconnchatbtn-" + chatroom + "' title='Cerrar chat / Chat close' value='X' />");
+                $( "#chattitle-" + chatroom ).append("<div class='clear'></div>");
+                $( "#chatroom-" + chatroom ).append( "<div id='chatmsg-" + chatroom + "' class='chatmsg'></div>" );
+                $( "#chatroom-" + chatroom ).append( "<div class='msgtosendLayer'><input type='text' id='msgtosend-" + chatroom + "' class='msgtosend' /></div>" );
+                $( "#disconnchatbtn-" + chatroom ).on( 'click', function( e ) {
+                  var chroom = $( this ).attr("id").replace( "disconnchatbtn-", "" ),
+                      usersRoom = chroom.split( '_' ),
+                      u = ( usersRoom[0] == nickname )?usersRoom[1]:usersroom[0];
+                  consoleLog( "Disconnecting chat room '" + data.chatroom + "'" );
+                  socket.emit( 'roomclose', { chatroom: data.chatroom } );
+                  $( "#join-" + u ).show();
+                });
+                chatWindows.push( data.chatroom );
+                /**
+                * Escucha por el Evento 'cuando haya pulsado una tecla' y sea 'ENTER' dentro del input text 'msgtosend'
+                *
+                * Listen event key press into the 'msgtosend' and it will be an 'ENTER' send its value
+                */
+                $( "#msgtosend-" + chatroom ).on( "keyup", function( e ) {
+                  if ( e.which == 13 && $( this ).val() ) {
+                    var chroom = $( this ).attr( "id" ).replace( "msgtosend-", "" );
+                    socket.emit( 'roommsg', { chatroom: data.chatroom, from: nickname, msg: $( "#msgtosend-" + chroom ).val() } );
+                    $( this ).val( "" );
+                    consoleLog( "Sent message to room '" + chatroom + "'" );
+                  }
+                  e.preventDefault();
+                });
+                break;
+
+              /**
+               * Procesamiento de mensaje de chatroom para mostrarlo en la ventana que corresponda
+               *
+               * It processes chatroom's message to show in correct window
+               */
+              case "roommsg":
+                consoleLog( "received message to chatroom. " + JSON.stringify( data ) );
+                var chroom = data.chatroom.replace( " with ", "_" );
+                $( "#chatmsg-" + chroom ).append( "<div><strong>" + data.from + ":</strong> " + data.msg + "</div>" );
+                break;
+
+              /**
+               * Cierra la ventana de chat en este cliente y en el cliente asociado a este chatroom
+               *
+               * It closes this chat window in this client and it closes too in chatroom associated client
+               */
+              case "closechatroom":
+                consoleLog( "Closing chat room " + data.chatroom );
+                var chroom = data.chatroom.replace( " with ", "_" );
+                $( "#chatroom-" + chroom ).remove();
+                break;
+
+              /**
+               * Por defecto muestra error en la ventana de consola
+               *
+               * By default shows an error in the console window
+               */
+              default:
+                consoleLog( "ERROR. Received message but no action" );
+            }
+          });
+          /**
+          * Escucha por el Evento / Mensaje que se reciba de server.js
+          * cuando se reciba la lista de usuarios y ejecutar la función anónima
+          *
+          * Listen event / message that it will be recive from server.js
+          * when it will be recived user list and it execute the anonymous function
+          */
+          socket.on( 'userlist', function( data ) {
+            if ( data ) {
+              // Legaron datos...
+              // The data came...
+              var key, u, roomUser;
+              consoleLog( "Recibida la lista de usuarios conectados " + data.userlist );
+              $( "#connectedusers" ).html( "" );
+              // Por cada usurio de la lista de usuarios conectados...
+              // Every user from connected user list
+              for ( key in data.userlist ) {
+                u = data.userlist[ key ];
+                if ( u == nickname ) {
+                  // ... si soy yo añadelo a la lista junto con el boton de desconexion
+                  // ... if i am the user then it add to user list with a disconnect button
+                  $( "#me" ).html( "" );
+                  $( "#me" ).append( "<div class='username'>" + u + "</div>");
+                  $( "#me" ).append( "<input type='button' class='disconnbtn' id='disconnbtn' title='Desconectar / Disconnect' value='X' />" );
+                  $( "#me" ).append( "<div class='clear'></div>");
+                  /**
+                  * Escucha por el Evento 'click' del botón de desconexión
+                  *
+                  * Listen event 'click' from desconnection button
+                  */
+                  $( "#disconnbtn" ).on( "click", function( e ) {
+                    // Desconecta el socket  / Socket disconnect
+                    socket.disconnect();
+                    consoleLog( 'disconnecting...' );
+                    $( "#me" ).html( "" );
+                    $( "#connectedusers" ).html( 'Desconectado / Disconnect' );
+                    $( "#connectedusers" ).append( "<input type='button' id='connagain' value='Conectar / Connect' />" );
+                    $( "#connagain" ).on( 'click', function( e ) {
+                      consoleLog( "Connecting again..." );
+                      socket.socket.connect();
+                    });
+                    closeChatWindowDisconnected( nickname );
+                  });
+                } else {
+                  // ... si no soy yo añadelo a la lista de usuarios
+                  // ... if i am not one then it add me to user list
+                  $( "#connectedusers" ).append( "<div class='user' id='user-"+u+"'></div>" );
+                  $( "#user-"+u ).append( "<div class='username'>" + u + "</div>" );
+                  $( "#user-"+u ).append( "<input type='button' id='join-"+u+"' title='Join with "+u+"' value='Join' />" );
+                  $( "#user-"+u ).append( "<div class='clear'></div>");
+                  $( "#join-"+u ).on( 'click',  function( e ) {
+                    var tmp = $( this ).attr( "id" ).replace("join-","").split( "_" ),
+                        u = tmp[0];
+                    consoleLog( "Joining chat room " + nickname + " with " + u + "..." );
+                    socket.emit( 'join', { me:nickname , with: u } );
+                    $( this ).hide();
+                  });
+                }
+                closeChatWindowDisconnected( u );
+              }
+            }
+          });
+
+          /**
+          * Escucha por el Evento / Mensaje que se reciba de server.js
+          * cuando se desconecte del servidor cerrando el socket
+          *
+          * Listen event / message that it will be recive from server.js
+          * when it will be disconnected from the server and it close the socket
+          */
+          socket.on( 'disconnect', function() {
+            consoleLog( "desconectado" );
+            $( "#me" ).html( "" );
+            $( "#connectedusers" ).html( "Desconectado / Disconnect" );
+          });
+
+          /**
+          * Función usada para mostrar mensajes en la consola de debug si la variable debug = true
+          *
+          * Function used to show messages into debug console if the debug variable is equal true
+          */
+          consoleLog = function( msg ) {
+            if ( debug ) console.log( msg );
+          }
+
+          /**
+           * Cierra todas las ventanas de chat asociadas al usuario pasado por parámetro
+           *
+           * It closes all associated chat window with the user sent by parameter
+           */
+          closeChatWindowDisconnected = function( u ) {
+            var key, roomUser;
+            for ( key in chatWindows ) {
+              roomUser = chatWindows[key].split( " with " );
+              consoleLog( "revisando room " + chatWindows[key] );
+              if ( roomUser[0] == u || roomUser[1] == u ) {
+                $( "#chatroom_"+chatWindows[key].replace( " with ", "_" ) ).remove();
+                consoleLog( "cerrando room of " + chatWindows[key] );
+              }
+            }
+          }
+
+        })();
+      </script>
+  </body>
+</html>
