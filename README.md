@@ -8,21 +8,32 @@ Simple chat with node.js and HTML5 websockets
 INSTALL
 =======
 
-$> git clone https://github.com/manufosela/SimpleChatNodeWebsockets.git
+Get source code from git:
 
-$> cd SimpleChatNodeWebsockets
+       $> git clone https://github.com/manufosela/SimpleChatNodeWebsockets.git
 
-$> npm install socket.io
+       $> cd SimpleChatNodeWebsockets
 
-       if you have an error with gyp use: npm install socket.io@"~0.8.1" -g
+Install socket.io:
 
-$> npm install connect
+       $> npm install socket.io
 
-$> node server.js
+If you have an error with gyp use: 
 
+       $> npm install socket.io@"~0.8.1" -g
 
-It show:
-    info  - socket.io started
+After this install:
+
+       $> npm install connect
+
+Edit the js/config.js file and change yout host/ip. It will be the same of the client.
+
+Execute the server:
+
+       $> node server.js
+
+And it show:
+       info  - socket.io started
     
     
 Then you can open a browser and type client.html
